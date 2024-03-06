@@ -56,6 +56,7 @@ const checkHorizontal = (board) => {
 };
 
 const checkVertical = (board) => {
+    let result = false;
     board.forEach((column, index) => {
         for (let i = 0; i < 3; i++) {
             if (column[i] !== 0) {
@@ -73,11 +74,12 @@ const checkVertical = (board) => {
                     ];
                     runningYellow = false;
                     runningRed = false;
-                    return true;
+                    result = true;
                 }
             }
         }
     })
+    return result;
 };
 
 const checkDiagonal = (board) => {

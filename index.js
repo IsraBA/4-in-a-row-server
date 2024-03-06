@@ -35,11 +35,13 @@ let roomExample = {
     ],
     winner: null,                  // Player object representing the winner, null if no winner yet
     gameOver: false,               // Boolean indicating if the game is over
+    creatorId: "socket.id"
 }
 
 io.on('connection', (socket) => {
+    console.log("user connected " + socket.id);
     // Handle player moves
-    socket.on('move', (roomId, cIndex) => {
+    socket.on('move', ({roomId, cIndex}) => {
         try {
             const room = rooms[roomId];
             if (!room || room.players.length !== 2 || room.gameOver) {
@@ -48,22 +50,25 @@ io.on('connection', (socket) => {
 
             // בדיקה אם בכלל תורו של השחקן ששלח את הבקשה לשחק
             const currentPlayer = room.players[room.currentPlayerIndex];
-            if (currentPlayer.id !== playerId) {
+            if (currentPlayer.id !== socket.id) {
                 throw { code: 410, msg: 'Not your turn' }; // התעלמות מהמהלך של השחקן שלא תורו
             }
 
             // עדכון הלוח ולמי לתת אנימציה
-            const board = updateBoard(room.board, cIndex, room.turnP1);
+            const board = updateBoard(room.board, cIndex, room.currentPlayerIndex);
 
             // החלפת הטיימר בין השחקנים
-            switchPlayer(room, io);
+            switchPlayer(room);
 
-            // שליחת מצב המשחק (כולל זמן) לקליינטים
-            io.to(roomId).emit('gameState', board);
+            const data = {...board, currentPlayerIndex: room.currentPlayerIndex};
+            console.log("data: ", data);
+            // שליחת מצב המשחק (כולל זמן ותור מי) לקליינטים
+            io.to(roomId).emit('gameState', data);
 
             // בדיקת הלוח
             const winner = check(board.newBoard);
             if (winner.winner) {
+                // console.log("the winner is " + winner.winner)
                 io.to(roomId).emit('gameOver', winner)
             }
         } catch (err) {
@@ -73,12 +78,15 @@ io.on('connection', (socket) => {
     });
 
     // כאשר שחקן מתנתק
-    socket.on('disconnect', (roomId, reason) => {
+    socket.on('disconnect', ({ roomId, reason }) => {
         try {
-            const room = rooms[roomId];
-            if (!room || room.gameOver) {
-                throw { code: 401, msg: 'Room not found' }; // זריקת שגיאה במידה והחדר לא נמצא
-            }
+            console.log("A user disconnected", socket.id);
+            const room = findRoomBySocketId(socket.id);
+            let reason = 'intentional';
+            // const room = rooms[roomId];
+            // if (!room || room.gameOver) {
+            //     throw { code: 401, msg: 'Room not found' }; // זריקת שגיאה במידה והחדר לא נמצא
+            // }
 
             if (reason === 'intentional') {
                 // השחקן התנתק באופן מכוון
@@ -137,7 +145,8 @@ io.on('connection', (socket) => {
                 [0, 0, 0, 0, 0, 0]
             ],
             winner: null,
-            gameOver: false
+            gameOver: false,
+            creatorId: socket.id
         }
         socket.emit('privateRoomCreated', roomId);
     });
@@ -171,14 +180,16 @@ io.on('connection', (socket) => {
         if (matchedRoomId) {
             rooms[matchedRoomId].players.push({ id: socket.id, time: 0 });
             socket.join(matchedRoomId);
-            io.to(matchedRoomId).emit('strangersGameJoined', matchedRoomId);
+            console.log("room joined: ", rooms[matchedRoomId])
+            io.to(matchedRoomId).emit('strangersGameJoined', rooms[matchedRoomId]);
+            console.log("rooms: ", Object.keys(rooms));
         } else {
             let newRoomId = generateRoomId();
             // לא קיים כבר IDבדיקה שה
             while (rooms[newRoomId]) {
                 newRoomId = generateRoomId();
             }
-            rooms[newRoomId] = rooms[newRoomId] = {
+            rooms[newRoomId] = {
                 roomId: newRoomId,
                 players: [{ id: socket.id, time: 0 }],
                 currentPlayerIndex: 0,
@@ -193,10 +204,13 @@ io.on('connection', (socket) => {
                     [0, 0, 0, 0, 0, 0]
                 ],
                 winner: null,
-                gameOver: false
+                gameOver: false,
+                creatorId: socket.id
             };
             socket.join(newRoomId);
-            socket.emit('strangersGameWaiting', newRoomId);
+            console.log("room created: ", rooms[newRoomId])
+            socket.emit('strangersGameWaiting', rooms[newRoomId]);
+            console.log("rooms: ", Object.keys(rooms));
         }
     });
 });
@@ -204,6 +218,14 @@ io.on('connection', (socket) => {
 function generateRoomId() {
     return Math.random().toString(36).substr(2, 6);
 }
+
+function findRoomBySocketId(socketId) {
+    const roomId = Object.keys(rooms).find(roomId =>
+        rooms[roomId].players.some(player => player.id === socketId)
+    );
+    return rooms[roomId] || null; // Return roomId if found, otherwise return null
+}
+
 
 httpServer.listen(3001, () => {
     console.log('Server running on port http://localhost:3001');

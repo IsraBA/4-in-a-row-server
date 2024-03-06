@@ -8,6 +8,7 @@ function intentional(room, playerId) {
     // מחיקת החדר אם כל השחקנים פרשו
     if (room.players.length === 0) {
         delete rooms[room.roomId];
+        console.log("rooms: ", Object.keys(rooms));
         return;
     }
 
