@@ -35,7 +35,8 @@ let roomExample = {
     ],
     winner: null,                  // Player object representing the winner, null if no winner yet
     gameOver: false,               // Boolean indicating if the game is over
-    creatorId: "socket.id"
+    creatorId: "socket.id",
+    isPrivate: Boolean
 }
 
 io.on('connection', (socket) => {
@@ -97,7 +98,7 @@ io.on('connection', (socket) => {
                 // טיימר התנתקות מופעל
                 accidental(room, socket.id);
             } else {
-                console.log("User disconnected and the room already deleted")
+                console.log(`User ${socket.id} disconnected and the room already deleted`)
             }
         } catch (err) {
             console.error(err);
@@ -113,7 +114,7 @@ io.on('connection', (socket) => {
                 console.log("A user disconnected intentionally", socket.id);
                 intentional(room, socket.id);
             } else {
-                console.log("User left and the room already deleted")
+                console.log(`User ${socket.id} left and the room already deleted`)
             }
         } catch (err) {
             console.error(err);
@@ -167,7 +168,11 @@ io.on('connection', (socket) => {
 
     // Handle private room creation and joining
     socket.on('createPrivateRoom', () => {
-        const roomId = generateRoomId();
+        let roomId = generateRoomId();
+        // לא קיים כבר IDבדיקה שה
+        while (rooms[roomId]) {
+            roomId = generateRoomId();
+        }
         rooms[roomId] = {
             roomId: roomId,
             players: [{ id: socket.id, time: 0 }],
@@ -184,21 +189,27 @@ io.on('connection', (socket) => {
             ],
             winner: null,
             gameOver: false,
-            creatorId: socket.id
+            creatorId: socket.id,
+            isPrivate: true
         }
-        socket.emit('privateRoomCreated', roomId);
+        socket.join(roomId);
+        socket.emit('privateRoomCreated', rooms[roomId]);
+        console.log(`User ${socket.id} ***created private*** room ${roomId}`);
     });
 
-    socket.on('joinPrivateRoom', (roomId) => {
+    socket.on('joinPrivateRoom', (privateRoomId) => {
         try {
-            const room = rooms[roomId];
+            console.log("private Room Id: ", privateRoomId);
+
+            const room = rooms[privateRoomId];
             if (!room || room.players.length >= 2 || room.gameOver) {
                 throw { code: 401, msg: 'Room full or not found' }; // זריקת שגיאה במידה והחדר לא נמצא
             }
 
             room.players.push({ id: socket.id, time: 0 });
-            socket.join(roomId);
-            io.to(roomId).emit('privateRoomJoined', roomId);
+            socket.join(privateRoomId);
+            io.to(privateRoomId).emit('privateRoomJoined', rooms[privateRoomId]);
+            console.log(`User ${socket.id} ***joined private*** room ${privateRoomId}`);
         } catch (err) {
             console.error(err);
             socket.emit('error', { code: err.code || 500, msg: err.msg || err.message });
@@ -210,7 +221,7 @@ io.on('connection', (socket) => {
         let matchedRoomId = null;
         Object.keys(rooms).forEach((roomId) => {
             const room = rooms[roomId];
-            if (room.players.length === 1 && !room.gameOver) {
+            if (room.players.length === 1 && !room.gameOver && !room.isPrivate) {
                 matchedRoomId = roomId;
             }
         });
@@ -243,10 +254,11 @@ io.on('connection', (socket) => {
                 ],
                 winner: null,
                 gameOver: false,
-                creatorId: socket.id
+                creatorId: socket.id,
+                isPrivate: false,
             };
             socket.join(newRoomId);
-            console.log(`User ${socket.id} created room ${newRoomId}`)//: ", rooms[newRoomId])
+            console.log(`User ${socket.id} created room ${newRoomId}`)
             socket.emit('strangersGameWaiting', rooms[newRoomId]);
             // console.log("rooms: ", Object.keys(rooms));
         }
