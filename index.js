@@ -57,21 +57,22 @@ io.on('connection', (socket) => {
             // עדכון הלוח ולמי לתת אנימציה
             const board = updateBoard(room.board, cIndex, room.currentPlayerIndex);
 
-            // החלפת הטיימר בין השחקנים
-            switchPlayer(room);
+            // בדיקת הלוח
+            const winner = check(board.newBoard);
+            // החלפת הטיימר בין השחקנים אם אין מנצח עדיין
+            winner.winner ? '' : switchPlayer(room);
 
             const data = { ...board, currentPlayerIndex: room.currentPlayerIndex };
             // console.log("data: ", data);
             // שליחת מצב המשחק (כולל זמן ותור מי) לקליינטים
             io.to(roomId).emit('gameState', data);
 
-            // בדיקת הלוח
-            const winner = check(board.newBoard);
+            // שליחה לשחקנים מי ניצח אם מישהו ניצח
             if (winner.winner) {
                 // console.log("the winner is " + winner.winner)
                 io.to(roomId).emit('gameOver', winner);
                 delete rooms[roomId];
-                console.log("the room was deleted")
+                console.log(`the room ${roomId} has been deleted cuz the game is over`)
             }
         } catch (err) {
             console.error(err);
@@ -87,11 +88,16 @@ io.on('connection', (socket) => {
 
             // בדיקה שהחדר לא כבר נמחק
             if (room) {
+                // אם שחקן התחבר ויצר חדר חדש ואז התנתק ישר - החדר נמחק
+                if (room.players.length === 1) {
+                    console.log(`room ${room.roomId} deleted`)
+                    delete rooms[room.roomId];
+                }
                 console.log("A user disconnected by mistake", socket.id);
                 // טיימר התנתקות מופעל
                 accidental(room, socket.id);
             } else {
-                console.log("The room already deleted")
+                console.log("User disconnected and the room already deleted")
             }
         } catch (err) {
             console.error(err);
@@ -107,7 +113,7 @@ io.on('connection', (socket) => {
                 console.log("A user disconnected intentionally", socket.id);
                 intentional(room, socket.id);
             } else {
-                console.log("The room already deleted")
+                console.log("User left and the room already deleted")
             }
         } catch (err) {
             console.error(err);
@@ -133,13 +139,13 @@ io.on('connection', (socket) => {
                 if (playerIndex !== -1) {
                     socket.join(roomId);
                     console.log('the player who reconnect: ', player)
-                    console.log('old room: ', room)
+                    // console.log('old room: ', room)
                     rooms[roomId].players[playerIndex].id = socket.id;
                     // של יוצר החדר אם הוא זה שהתנתק idשינוי ה
                     if (room.creatorId === playerId) {
                         rooms[roomId].creatorId = socket.id;
                     }
-                    console.log('new room: ', room)
+                    // console.log('new room: ', room)
                     // שליחת מצב המשחק לשחקן
                     io.to(roomId).emit('playerReconnect', {
                         roomId: room.roomId,
@@ -212,7 +218,7 @@ io.on('connection', (socket) => {
         if (matchedRoomId) {
             rooms[matchedRoomId].players.push({ id: socket.id, time: 0 });
             socket.join(matchedRoomId);
-            console.log("room joined")//: ", rooms[matchedRoomId])
+            console.log(`User ${socket.id} joined room ${matchedRoomId}`)//: ", rooms[matchedRoomId])
             io.to(matchedRoomId).emit('strangersGameJoined', rooms[matchedRoomId]);
             // console.log("rooms: ", Object.keys(rooms));
         } else {
@@ -240,7 +246,7 @@ io.on('connection', (socket) => {
                 creatorId: socket.id
             };
             socket.join(newRoomId);
-            console.log("room created")//: ", rooms[newRoomId])
+            console.log(`User ${socket.id} created room ${newRoomId}`)//: ", rooms[newRoomId])
             socket.emit('strangersGameWaiting', rooms[newRoomId]);
             // console.log("rooms: ", Object.keys(rooms));
         }
