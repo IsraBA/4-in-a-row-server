@@ -191,7 +191,8 @@ io.on('connection', (socket) => {
             winner: null,
             gameOver: false,
             creatorId: socket.id,
-            isPrivate: true
+            isPrivate: true,
+            joinLink: process.env.CLIENT + '/onlinePrivate/' + roomId
         }
         socket.join(roomId);
         socket.emit('privateRoomCreated', rooms[roomId]);
